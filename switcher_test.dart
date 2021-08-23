@@ -18,11 +18,13 @@ void main(List args) {
       if (d == null) return;
 
       SwitcherDevicesTypes sDeviceType = getDeviceType(d.data);
-      SwitcherDeviceState switcherDeviceState = getDeviceState(d.data);
+      String deviceId = getDeviceId(d.data);
+      // SwitcherDeviceState switcherDeviceState = getDeviceState(d.data);
 
       print('Data: ${d.data}');
-      print('Datagram from ${d.address.address}:${d.port}: type: $sDeviceType '
-          'state: $switcherDeviceState');
+      print('Datagram from ${d.address.address}:${d.port}, type: $sDeviceType, '
+          'id: $deviceId, ');
+          // 'id: $deviceId, state: $switcherDeviceState');
       // print('utf8: ${utf8.decode(d.data)}');
 
       print('');
@@ -45,10 +47,38 @@ SwitcherDevicesTypes getDeviceType(Uint8List data) {
 
   if ('a7' == hex_model) {
     sDevicesTypes = SwitcherDevicesTypes.Switcher_V2_esp;
+  } else {
+    print('Cant find type');
   }
 
   return sDevicesTypes;
 }
+
+String getDeviceId(Uint8List data) {
+  List<String> hexData = [];
+
+
+  for(int a in data){
+    hexData.add(a.toRadixString(16));
+  }
+
+  print('hexData: ');
+  print(hexData);
+  List<String> hexSeparatedLetters = [];
+
+  for(String hexValue in hexData){
+    hexValue.runes.forEach((element) {
+      hexSeparatedLetters.add(String.fromCharCode(element));
+    });
+  }
+  print('hexSeparatedLetters');
+  print(hexSeparatedLetters);
+
+
+
+  return hexSeparatedLetters.sublist(23, 29).join();
+}
+
 
 SwitcherDeviceState getDeviceState(Uint8List data) {
   SwitcherDeviceState switcherDeviceState = SwitcherDeviceState.CantGetState;
@@ -90,6 +120,8 @@ SwitcherDeviceState getDeviceState(Uint8List data) {
   }
   return switcherDeviceState;
 }
+
+
 
 enum SwitcherDeviceState {
 // """Enum class representing the device's state."""
