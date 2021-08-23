@@ -18,14 +18,12 @@ void main(List args) {
       if (d == null) return;
 
       SwitcherDevicesTypes sDeviceType = getDeviceType(d.data);
-      // SwitcherDeviceState switcherDeviceState = getDeviceState(d.data);
+      SwitcherDeviceState switcherDeviceState = getDeviceState(d.data);
 
       print('Data: ${d.data}');
       print('Datagram from ${d.address.address}:${d.port}: type: $sDeviceType '
-          'state:');
-      // print('Datagram from ${d.address.address}:${d.port}: type: $sDeviceType '
-      //     'state: $switcherDeviceState');
-      print('utf8: ${utf8.decode(d.data)}');
+          'state: $switcherDeviceState');
+      // print('utf8: ${utf8.decode(d.data)}');
 
       print('');
       String message = String.fromCharCodes(d.data).trim();
@@ -37,7 +35,13 @@ void main(List args) {
 
 SwitcherDevicesTypes getDeviceType(Uint8List data) {
   SwitcherDevicesTypes sDevicesTypes = SwitcherDevicesTypes.NotRecognized;
-  String hex_model = data.sublist(75, 76)[0].toRadixString(16);
+  List<String> hexData = [];
+
+  for(int a in data){
+    hexData.add(a.toRadixString(16));
+  }
+
+  String hex_model = hexData.sublist(75, 76).toString();
 
   if ('a7' == hex_model) {
     sDevicesTypes = SwitcherDevicesTypes.Switcher_V2_esp;
@@ -48,7 +52,36 @@ SwitcherDevicesTypes getDeviceType(Uint8List data) {
 
 SwitcherDeviceState getDeviceState(Uint8List data) {
   SwitcherDeviceState switcherDeviceState = SwitcherDeviceState.CantGetState;
-  String hex_model = data.sublist(266, 270)[0].toRadixString(16);
+  List<String> hexData = [];
+
+  for(int a in data){
+    hexData.add(a.toRadixString(16));
+  }
+
+  print('hexData: ');
+  print(hexData);
+  List<String> hexSeparatedLetters = [];
+
+  for(String hexValue in hexData){
+    hexValue.runes.forEach((element) {
+      hexSeparatedLetters.add(String.fromCharCode(element));
+    });
+  }
+  print('hexSeparatedLetters');
+  print(hexSeparatedLetters);
+
+  List<int> hexSeparatedAsInt = [];
+  for(String hexLetter in hexSeparatedLetters){
+    hexSeparatedAsInt.add(hexLetter.codeUnitAt(0));
+  }
+
+  print('hexSeparatedAsInt');
+  print(hexSeparatedAsInt);
+
+  print('Decode');
+  print( hexSeparatedAsInt.sublist(266, 270));
+
+  String hex_model = 'asd';
 
   if (hex_model == 'on') {
     switcherDeviceState = SwitcherDeviceState.ON;
