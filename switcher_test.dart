@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -24,7 +23,7 @@ void main(List args) {
       print('Data: ${d.data}');
       print('Datagram from ${d.address.address}:${d.port}, type: $sDeviceType, '
           'id: $deviceId, ');
-          // 'id: $deviceId, state: $switcherDeviceState');
+      // 'id: $deviceId, state: $switcherDeviceState');
       // print('utf8: ${utf8.decode(d.data)}');
 
       print('');
@@ -39,7 +38,7 @@ SwitcherDevicesTypes getDeviceType(Uint8List data) {
   SwitcherDevicesTypes sDevicesTypes = SwitcherDevicesTypes.NotRecognized;
   List<String> hexData = [];
 
-  for(int a in data){
+  for (int a in data) {
     hexData.add(a.toRadixString(16));
   }
 
@@ -57,8 +56,7 @@ SwitcherDevicesTypes getDeviceType(Uint8List data) {
 String getDeviceId(Uint8List data) {
   List<String> hexData = [];
 
-
-  for(int a in data){
+  for (int a in data) {
     hexData.add(a.toRadixString(16));
   }
 
@@ -66,7 +64,7 @@ String getDeviceId(Uint8List data) {
   print(hexData);
   List<String> hexSeparatedLetters = [];
 
-  for(String hexValue in hexData){
+  for (String hexValue in hexData) {
     hexValue.runes.forEach((element) {
       hexSeparatedLetters.add(String.fromCharCode(element));
     });
@@ -74,17 +72,14 @@ String getDeviceId(Uint8List data) {
   print('hexSeparatedLetters');
   print(hexSeparatedLetters);
 
-
-
-  return hexSeparatedLetters.sublist(23, 29).join();
+  return hexSeparatedLetters.sublist(24, 30).join();
 }
-
 
 SwitcherDeviceState getDeviceState(Uint8List data) {
   SwitcherDeviceState switcherDeviceState = SwitcherDeviceState.CantGetState;
   List<String> hexData = [];
 
-  for(int a in data){
+  for (int a in data) {
     hexData.add(a.toRadixString(16));
   }
 
@@ -92,7 +87,7 @@ SwitcherDeviceState getDeviceState(Uint8List data) {
   print(hexData);
   List<String> hexSeparatedLetters = [];
 
-  for(String hexValue in hexData){
+  for (String hexValue in hexData) {
     hexValue.runes.forEach((element) {
       hexSeparatedLetters.add(String.fromCharCode(element));
     });
@@ -101,7 +96,7 @@ SwitcherDeviceState getDeviceState(Uint8List data) {
   print(hexSeparatedLetters);
 
   List<int> hexSeparatedAsInt = [];
-  for(String hexLetter in hexSeparatedLetters){
+  for (String hexLetter in hexSeparatedLetters) {
     hexSeparatedAsInt.add(hexLetter.codeUnitAt(0));
   }
 
@@ -109,7 +104,7 @@ SwitcherDeviceState getDeviceState(Uint8List data) {
   print(hexSeparatedAsInt);
 
   print('Decode');
-  print( hexSeparatedAsInt.sublist(266, 270));
+  print(hexSeparatedAsInt.sublist(266, 270));
 
   String hex_model = 'asd';
 
@@ -120,8 +115,6 @@ SwitcherDeviceState getDeviceState(Uint8List data) {
   }
   return switcherDeviceState;
 }
-
-
 
 enum SwitcherDeviceState {
 // """Enum class representing the device's state."""
