@@ -1,32 +1,36 @@
+import 'dart:convert' show utf8;
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'dart:convert' show utf8;
-
-
 class SwitcherEntity {
-
-
-  SwitcherEntity({required this.deviceType, required this.deviceId,
-    required this.switcherIp, required this.switcherName, this.socket,
-    this.deviceState = SwitcherDeviceState.CantGetState,
-    this.devicePass = '00000000', this.phoneId = '0000', this.pSession,
-    this.statusSocket ,this.log, this.port = 9957,
-    this.lastShutdownRemainingSecondsValue, required this.macAddress,
+  SwitcherEntity({
+    required this.deviceType,
+    required this.deviceId,
+    required this.switcherIp,
+    required this.switcherName,
+    this.deviceState = SwitcherDeviceState.cantGetState,
+    this.devicePass = '00000000',
+    this.phoneId = '0000',
+    this.pSession,
+    this.statusSocket,
+    this.log,
+    this.port = 9957,
+    this.lastShutdownRemainingSecondsValue,
+    required this.macAddress,
     required this.powerConsumption,
     this.remainingTimeForExecution,
   });
 
-  factory SwitcherEntity.CreateWithBytes(Datagram datagram){
-    Uint8List data = datagram.data;
+  factory SwitcherEntity.CreateWithBytes(Datagram datagram) {
+    final Uint8List data = datagram.data;
 
-    List<String> messageBuffer = [];
+    final List<String> messageBuffer = [];
 
     for (int a in data) {
       messageBuffer.add(a.toRadixString(16).padLeft(2, '0'));
     }
 
-    List<String> hexSeparatedLetters = [];
+    final List<String> hexSeparatedLetters = [];
 
     for (String hexValue in messageBuffer) {
       hexValue.runes.forEach((element) {
@@ -34,30 +38,34 @@ class SwitcherEntity {
       });
     }
 
-
-    if(!isSwitcherMessage(data, hexSeparatedLetters)){
+    if (!isSwitcherMessage(data, hexSeparatedLetters)) {
       print('Not a switcher message arrived to here');
     }
 
-
-    SwitcherDevicesTypes sDeviceType = getDeviceType(messageBuffer);
-    String deviceId = getDeviceId(hexSeparatedLetters);
-    SwitcherDeviceState switcherDeviceState = getDeviceState(hexSeparatedLetters);
+    final SwitcherDevicesTypes sDeviceType = getDeviceType(messageBuffer);
+    final String deviceId = getDeviceId(hexSeparatedLetters);
+    final SwitcherDeviceState switcherDeviceState =
+        getDeviceState(hexSeparatedLetters);
     // String switcherIp = getDeviceIp(hexSeparatedLetters);
-    String switcherIp = datagram.address.address;
-    String switcherMac = getMac(hexSeparatedLetters);
-    String powerConsumption = getPowerConsumption(hexSeparatedLetters);
-    String getRemaining = getRemainingTimeForExecution(hexSeparatedLetters);
-    String switcherName = getDeviceName(data);
-    String lastShutdownRemainingSecondsValue = shutdownRemainingSeconds(hexSeparatedLetters);
+    final String switcherIp = datagram.address.address;
+    final String switcherMac = getMac(hexSeparatedLetters);
+    final String powerConsumption = getPowerConsumption(hexSeparatedLetters);
+    final String getRemaining =
+        getRemainingTimeForExecution(hexSeparatedLetters);
+    final String switcherName = getDeviceName(data);
+    final String lastShutdownRemainingSecondsValue =
+        shutdownRemainingSeconds(hexSeparatedLetters);
 
-    return SwitcherEntity(deviceType: sDeviceType, deviceId: deviceId,
-      switcherIp: switcherIp, deviceState: switcherDeviceState,
-      switcherName: switcherName, macAddress: switcherMac,
-      lastShutdownRemainingSecondsValue: lastShutdownRemainingSecondsValue,
-      powerConsumption: powerConsumption,
-      remainingTimeForExecution: getRemaining
-    );
+    return SwitcherEntity(
+        deviceType: sDeviceType,
+        deviceId: deviceId,
+        switcherIp: switcherIp,
+        deviceState: switcherDeviceState,
+        switcherName: switcherName,
+        macAddress: switcherMac,
+        lastShutdownRemainingSecondsValue: lastShutdownRemainingSecondsValue,
+        powerConsumption: powerConsumption,
+        remainingTimeForExecution: getRemaining);
   }
 
   String deviceId;
@@ -71,29 +79,37 @@ class SwitcherEntity {
   String devicePass;
   String macAddress;
   String? remainingTimeForExecution;
-  String? socket;
   String? log;
   String? pSession;
   String? statusSocket;
   String? lastShutdownRemainingSecondsValue;
 
-
-
-  static bool isSwitcherMessage(Uint8List data, List<String> hexSeparatedLetters) {
-
+  static bool isSwitcherMessage(
+      Uint8List data, List<String> hexSeparatedLetters) {
     // Verify the broadcast message had originated from a switcher device.
-    return hexSeparatedLetters.sublist(0, 4).join() == 'fef0' && data.length == 165;
+    return hexSeparatedLetters.sublist(0, 4).join() == 'fef0' &&
+        data.length == 165;
   }
 
-  static SwitcherDevicesTypes getDeviceType(List<String> message_buffer) {
-    SwitcherDevicesTypes sDevicesTypes = SwitcherDevicesTypes.NotRecognized;
+  static SwitcherDevicesTypes getDeviceType(List<String> messageBuffer) {
+    SwitcherDevicesTypes sDevicesTypes = SwitcherDevicesTypes.notRecognized;
 
-    String hex_model = message_buffer.sublist(75, 76)[0].toString();
+    final String hexModel = messageBuffer.sublist(75, 76)[0].toString();
 
-    if ('a7' == hex_model) {
-      sDevicesTypes = SwitcherDevicesTypes.Switcher_V2_esp;
+    if (hexModel == '0f') {
+      sDevicesTypes = SwitcherDevicesTypes.switcherMini;
+    } else if (hexModel == 'a8') {
+      sDevicesTypes = SwitcherDevicesTypes.switcherPowerPlug;
+    } else if (hexModel == '0b') {
+      sDevicesTypes = SwitcherDevicesTypes.switcherTouch;
+    } else if (hexModel == 'a7') {
+      sDevicesTypes = SwitcherDevicesTypes.switcherV2Esp;
+    } else if (hexModel == 'a1') {
+      sDevicesTypes = SwitcherDevicesTypes.switcherV2qualcomm;
+    } else if (hexModel == '17') {
+      sDevicesTypes = SwitcherDevicesTypes.switcherV4;
     } else {
-      print('Cant find type $hex_model');
+      print('New device type? hexModel:$hexModel');
     }
 
     return sDevicesTypes;
@@ -102,7 +118,7 @@ class SwitcherEntity {
   static String getDeviceIp(List<String> hexSeparatedLetters) {
     // Extract the IP address from the broadcast message.
     // TODO: Fix function to return ip and not hexIp
-    List<String> hexIp = hexSeparatedLetters.sublist(152, 160);
+    final List<String> hexIp = hexSeparatedLetters.sublist(152, 160);
     // int ipAddressInt = int.parse(hexIp.sublist(6, 8).join() + hexIp.sublist(4, 6).join() + hexIp.sublist(2, 4).join() + hexIp.sublist(0, 2).join());
     // int ipAddressStringInt = int.parse(hexIp.sublist(6, 8).join()) + int.parse(hexIp.sublist(4, 6).join()) + int.parse(hexIp.sublist(2, 4).join()) + int.parse(hexIp.sublist(0, 2).join());
     // int(hex_ip[6:8] + hex_ip[4:6] + hex_ip[2:4] + hex_ip[0:2], 16)
@@ -110,7 +126,8 @@ class SwitcherEntity {
   }
 
   static String getPowerConsumption(List<String> hexSeparatedLetters) {
-    List<String> hex_power_consumption = hexSeparatedLetters.sublist(270, 278);
+    final List<String> hex_power_consumption =
+        hexSeparatedLetters.sublist(270, 278);
 
     // return int.parse(hex_power_consumption.sublist(2, 4).join()) + int(hex_power_consumption.sublist(0, 2).join());
     return hex_power_consumption.join();
@@ -118,25 +135,25 @@ class SwitcherEntity {
 
   /// Extract the time remains for the current execution.
   static String getRemainingTimeForExecution(List<String> hexSeparatedLetters) {
-    List<String> hex_power_consumption = hexSeparatedLetters.sublist(294, 302);
+    final List<String> hex_power_consumption =
+        hexSeparatedLetters.sublist(294, 302);
     try {
-      int sum =
-          int.parse(hex_power_consumption.sublist(6, 8).join()) +
-              int.parse(hex_power_consumption.sublist(4, 6).join()) +
-              int.parse(hex_power_consumption.sublist(2, 4).join()) +
-              int.parse(hex_power_consumption.sublist(0, 2).join());
+      final int sum = int.parse(hex_power_consumption.sublist(6, 8).join()) +
+          int.parse(hex_power_consumption.sublist(4, 6).join()) +
+          int.parse(hex_power_consumption.sublist(2, 4).join()) +
+          int.parse(hex_power_consumption.sublist(0, 2).join());
 
       // TODO: complete the calculation of the remaining time
       return sum.toString();
-    }
-    catch (e) {
+    } catch (e) {
       return hex_power_consumption.join();
     }
   }
 
   static String getMac(List<String> hexSeparatedLetters) {
-    String macNoColon = hexSeparatedLetters.sublist(160, 172).join().toUpperCase();
-    String macAddress = '${macNoColon.substring(0, 2)}:'
+    final String macNoColon =
+        hexSeparatedLetters.sublist(160, 172).join().toUpperCase();
+    final String macAddress = '${macNoColon.substring(0, 2)}:'
         '${macNoColon.substring(2, 4)}:${macNoColon.substring(4, 6)}:'
         '${macNoColon.substring(6, 8)}:${macNoColon.substring(8, 10)}:'
         '${macNoColon.substring(10, 12)}';
@@ -149,7 +166,8 @@ class SwitcherEntity {
   }
 
   static String shutdownRemainingSeconds(List<String> hexSeparatedLetters) {
-    String hexAutoShutdownVal = hexSeparatedLetters.sublist(310, 318).join();
+    final String hexAutoShutdownVal =
+        hexSeparatedLetters.sublist(310, 318).join();
     // TODO: Complete the code from python
     // int int_auto_shutdown_val_secs = int.parse(
     //   hexAutoShutdownVal.substring(6, 8)
@@ -192,37 +210,33 @@ class SwitcherEntity {
   }
 
   static SwitcherDeviceState getDeviceState(List<String> hexSeparatedLetters) {
-    SwitcherDeviceState switcherDeviceState = SwitcherDeviceState.CantGetState;
+    SwitcherDeviceState switcherDeviceState = SwitcherDeviceState.cantGetState;
 
+    String hexModel = '';
 
-    String hex_model = '';
-
-    hexSeparatedLetters.sublist(266, 270).forEach((item){
-      hex_model += item.toString();
+    hexSeparatedLetters.sublist(266, 270).forEach((item) {
+      hexModel += item.toString();
     });
 
-
-    if (hex_model == '0100') {
-      switcherDeviceState = SwitcherDeviceState.ON;
-    } else if (hex_model == '0000') {
-      switcherDeviceState = SwitcherDeviceState.OFF;
-    }
-    else{
-      print('Hex is not recognized: $hex_model');
+    if (hexModel == '0100') {
+      switcherDeviceState = SwitcherDeviceState.on;
+    } else if (hexModel == '0000') {
+      switcherDeviceState = SwitcherDeviceState.off;
+    } else {
+      print('Switcher state is not recognized: $hexModel');
     }
     return switcherDeviceState;
   }
 }
-
 
 enum SwitcherDeviceState {
 // """Enum class representing the device's state."""
 //
 // ON = "0100", "on"
 // OFF = "0000", "off"
-  CantGetState,
-  ON,
-  OFF,
+  cantGetState,
+  on,
+  off,
 }
 
 enum SwitcherDevicesTypes {
@@ -235,13 +249,11 @@ enum SwitcherDevicesTypes {
   // V2_QCA = "Switcher V2 (qualcomm)", "a1", DeviceCategory.WATER_HEATER
   // V4 = "Switcher V4", "17", DeviceCategory.WATER_HEATER
   //
-  NotRecognized,
-  Switcher_Mini,
-  Switcher_Power_Plug,
-  Switcher_Touch,
-  Switcher_V2_esp,
-  Switcher_V2_qualcomm,
-  Switcher_V4,
+  notRecognized,
+  switcherMini,
+  switcherPowerPlug,
+  switcherTouch,
+  switcherV2Esp,
+  switcherV2qualcomm,
+  switcherV4,
 }
-
-
