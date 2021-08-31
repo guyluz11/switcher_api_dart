@@ -2,8 +2,8 @@ import 'dart:convert' show utf8;
 import 'dart:io';
 import 'dart:typed_data';
 
-class SwitcherEntity {
-  SwitcherEntity({
+class SwitcherApiObject {
+  SwitcherApiObject({
     required this.deviceType,
     required this.deviceId,
     required this.switcherIp,
@@ -21,18 +21,18 @@ class SwitcherEntity {
     this.remainingTimeForExecution,
   });
 
-  factory SwitcherEntity.CreateWithBytes(Datagram datagram) {
+  factory SwitcherApiObject.createWithBytes(Datagram datagram) {
     final Uint8List data = datagram.data;
 
     final List<String> messageBuffer = [];
 
-    for (int a in data) {
-      messageBuffer.add(a.toRadixString(16).padLeft(2, '0'));
+    for (final int unit8 in data) {
+      messageBuffer.add(unit8.toRadixString(16).padLeft(2, '0'));
     }
 
     final List<String> hexSeparatedLetters = [];
 
-    for (String hexValue in messageBuffer) {
+    for (final String hexValue in messageBuffer) {
       hexValue.runes.forEach((element) {
         hexSeparatedLetters.add(String.fromCharCode(element));
       });
@@ -56,7 +56,7 @@ class SwitcherEntity {
     final String lastShutdownRemainingSecondsValue =
         shutdownRemainingSeconds(hexSeparatedLetters);
 
-    return SwitcherEntity(
+    return SwitcherApiObject(
         deviceType: sDeviceType,
         deviceId: deviceId,
         switcherIp: switcherIp,
