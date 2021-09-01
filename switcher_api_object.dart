@@ -1,6 +1,9 @@
-import 'dart:convert' show utf8;
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'aioswitcher/api/switcher_packets.dart';
+import 'aioswitcher/no_null_safty_file.dart';
 
 class SwitcherApiObject {
   SwitcherApiObject({
@@ -11,7 +14,6 @@ class SwitcherApiObject {
     this.deviceState = SwitcherDeviceState.cantGetState,
     this.devicePass = '00000000',
     this.phoneId = '0000',
-    this.pSession,
     this.statusSocket,
     this.log,
     this.port = 9957,
@@ -80,9 +82,24 @@ class SwitcherApiObject {
   String macAddress;
   String? remainingTimeForExecution;
   String? log;
-  String? pSession;
   String? statusSocket;
   String? lastShutdownRemainingSecondsValue;
+
+  var pSession = null;
+
+  static const P_SESSION = '00000000';
+  static const P_KEY = '00000000000000000000000000000000';
+
+  static const STATUS_EVENT = 'status';
+  static const READY_EVENT = 'ready';
+  static const ERROR_EVENT = 'error';
+  static const STATE_CHANGED_EVENT = 'state';
+
+  static const SWITCHER_UDP_IP = '0.0.0.0';
+  static const SWITCHER_UDP_PORT = 20002;
+
+  static const String OFF = '0';
+  static const String ON = '1';
 
   static bool isSwitcherMessage(
       Uint8List data, List<String> hexSeparatedLetters) {
@@ -113,6 +130,217 @@ class SwitcherApiObject {
     }
 
     return sDevicesTypes;
+  }
+
+  void turnOff() {
+    String offCommand = OFF + '00' + '00000000';
+    _runPowerCommand(offCommand);
+  }
+
+  Future<void> _runPowerCommand(String commandType) async {
+    pSession = await _login();
+  }
+
+  /// Used for sending actions to the device
+  void sendState({required SwitcherDeviceState command, int minutes = 0}) {
+    _getFullState();
+  }
+
+  /// Used for sending the get state packaet to the device.
+  /// Returns a tuple of hex timestamp, session id and an instance of SwitcherStateResponse
+  Future<String> _getFullState() async {
+    return _login();
+  }
+
+  /// Used for sending the login packet to the device.
+  Future<String> _login() async {
+    if (pSession != null) return pSession;
+
+    try {
+      String data = 'fef052000232a100${P_SESSION}340001000000000000000000'
+          '${_getTimeStamp()}00000000000000000000f0fe1c00${this.phoneId}0000'
+          '${this.devicePass}'
+          '00000000000000000000000000000000000000000000000000000000';
+
+      String timestamp = currentTimestampToHexadecimal();
+      String packet =
+          SwitcherPackets.LOGIN_PACKET.replaceFirst('{}', timestamp);
+      print(packet);
+      signPacketWithCrcKey(packet);
+    } catch (error) {
+      log = 'login failed due to an error $error';
+    }
+    return pSession;
+  }
+
+  static String _getTimeStamp() {
+    int timeInSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+    List<int> timeInBytes = pack(timeInSeconds);
+    String inHex = '';
+    timeInBytes.forEach((element) {
+      inHex += element.toRadixString(16).padLeft(2, '0');
+    });
+
+    return inHex;
+  }
+
+  /// Convert number to 32/64 bit unsigned integer as little-endian sequence of bytes
+  static List<int> pack(int valueToConvert) {
+    // var timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    ByteData sendValueBytes = ByteData(8);
+
+    try {
+      sendValueBytes.setUint64(0, valueToConvert);
+    } on UnsupportedError {
+      sendValueBytes.setUint32(0, valueToConvert);
+    }
+
+    Uint8List timeInBytes = sendValueBytes.buffer.asUint8List();
+    timeInBytes = timeInBytes.sublist(4);
+
+    return timeInBytes;
+  }
+
+  /// Generate hexadecimal representation of the current timestamp.
+  /// Return: Hexadecimal representation of the current unix time retrieved by ``time.time``.
+  String currentTimestampToHexadecimal() {
+    String currentTimeSinceEpoch =
+        DateTime.now().millisecondsSinceEpoch.toString();
+    String currentTimeRounded =
+        currentTimeSinceEpoch.substring(0, currentTimeSinceEpoch.length - 3);
+    print(currentTimeRounded);
+
+    int currentTimeInt = int.parse(currentTimeRounded);
+
+    // TODO: Undestand what is pack("<I", currentTimeInt) in python and continue
+    // Packed binary_timestamp = Packed(currentTimeInt);
+    // print(binary_timestamp);
+
+    return currentTimeInt.toRadixString(16).padLeft(2, '0');
+  }
+
+  /// Sign the packets with the designated crc key.
+  /// Return: The calculated and signed packet.
+  String signPacketWithCrcKey(String hexPacket) {
+    List<int> binaryPacket = hexDecimalStringToDecimalList(hexPacket);
+
+    Uint8List prefixed = Uint8List(5311);
+
+    // prefixed.buffer.asUint32List(0, 1)[0] = payload.length;
+    // prefixed.setRange(4, prefixed.length, payload);
+    ByteData bn = ByteData(4);
+    print(bn.getUint32(5311, Endian.little));
+    double a = 5311;
+    print('Now');
+    int c = 5311;
+    int b = 0000;
+    ByteData(b).setFloat32(2, a);
+    print(b);
+    // int a = ByteData.getUint32(2, 2);
+
+    // CrcValue a = Crc16CcittTrue().convert(binaryPacket);
+    List<int> binary_packet = [
+      254,
+      240,
+      82,
+      0,
+      2,
+      50,
+      161,
+      0,
+      0,
+      0,
+      0,
+      0,
+      52,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      52,
+      65,
+      47,
+      97,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      240,
+      254,
+      28,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ];
+    //Out --> 36087
+
+    String result = NoNullSaftyMethods.getCrc16CcittTrue(binary_packet);
+    // CrcValue result = Crc16CcittTrue().convert(binary_packet);
+    print('');
+    print('bin $result');
+    return 'a';
+  }
+
+  /// Convert Hexadecimal String (example FE) to Decimal list (will be 254).
+  /// Called in python unhexlify.
+  List<int> hexDecimalStringToDecimalList(String hexDecimalString) {
+    List<int> binaryPacket = [];
+
+    for (int i = 0; i <= hexDecimalString.length - 2; i += 2) {
+      final hex = hexDecimalString.substring(i, i + 2);
+
+      final number = int.parse(hex, radix: 16);
+      binaryPacket.add(number);
+    }
+    return binaryPacket;
   }
 
   static String getDeviceIp(List<String> hexSeparatedLetters) {

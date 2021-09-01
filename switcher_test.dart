@@ -1,3 +1,4 @@
+// @dart=2.10
 import 'dart:io';
 
 import 'switcher_api_object.dart';
@@ -37,8 +38,6 @@ Stream<int?> getDevices() async* {
         'Datagram from ${switcherEntity.switcherIp}:${switcherEntity.port}, type: ${switcherEntity.deviceType}, '
         // 'id: $deviceId, ');
         'id: ${switcherEntity.deviceId}, state: ${switcherEntity.deviceState}');
-    // print('utf8: ${utf8.decode(d.data)}');
-
+    switcherEntity.turnOff();
   }
-  ;
 }
