@@ -1,8 +1,9 @@
 import 'package:crclib/catalog.dart';
 import 'package:crclib/crclib.dart';
 
-class NoNullSaftyMethods {
-  static String getCrc16CcittTrue(List<int> listOfNumbers) {
+class NoNullSafetyMethods {
+  static int getCrc16CcittTrue(List<int> listOfNumbers) {
+    CrcValue z = Crc16CcittTrue().convert(listOfNumbers);
     CrcValue a = Crc16GeniBus().convert(listOfNumbers);
     CrcValue b = Crc16Gsm().convert(listOfNumbers);
     CrcValue c = Crc16Ibm3740().convert(listOfNumbers);
@@ -15,6 +16,6 @@ class NoNullSaftyMethods {
     CrcValue l = Crc16Tms37157().convert(listOfNumbers);
     CrcValue m = Crc16Xmodem().convert(listOfNumbers);
 
-    return a.toString();
+    return int.parse(c.toString());
   }
 }

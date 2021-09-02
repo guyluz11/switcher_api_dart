@@ -162,6 +162,7 @@ class SwitcherApiObject {
           '${this.devicePass}'
           '00000000000000000000000000000000000000000000000000000000';
 
+      data = await _crcSignFullPacketComKey(data, P_KEY);
       String timestamp = currentTimestampToHexadecimal();
       String packet =
           SwitcherPackets.LOGIN_PACKET.replaceFirst('{}', timestamp);
@@ -171,6 +172,17 @@ class SwitcherApiObject {
       log = 'login failed due to an error $error';
     }
     return pSession;
+  }
+
+  static Future<String> _crcSignFullPacketComKey(
+      String pData, String pKey) async {
+    List<int> bufferHex = hexStringToDecimalList(pData);
+    String a = NoNullSafetyMethods.getCrc16CcittTrue(bufferHex)
+        .toRadixString(16)
+        .padLeft(2, '0');
+    print(a);
+    decimalStringToDecimalStringList(pKey);
+    return 'Test';
   }
 
   static String _getTimeStamp() {
@@ -183,6 +195,43 @@ class SwitcherApiObject {
     });
 
     return inHex;
+  }
+
+  static List<int> hexStringToDecimalList(String hex) {
+    List<int> decimalIntList = [];
+    String twoNumbers = '';
+
+    for (int i = 0; i < hex.length; i++) {
+      if (twoNumbers == '') {
+        twoNumbers = twoNumbers + hex[i];
+
+        continue;
+      } else {
+        twoNumbers = twoNumbers + hex[i];
+        decimalIntList.add(int.parse(twoNumbers, radix: 16));
+        twoNumbers = '';
+      }
+    }
+    return decimalIntList;
+  }
+
+  static List<String> decimalStringToDecimalStringList(String decimal) {
+    List<String> decimalIntList = [];
+    String twoNumbers = '';
+
+    for (int i = 0; i < decimal.length; i++) {
+      if (twoNumbers == '') {
+        twoNumbers = twoNumbers + decimal[i];
+
+        continue;
+      } else {
+        twoNumbers = twoNumbers + decimal[i];
+
+        decimalIntList.add(twoNumbers);
+        twoNumbers = '';
+      }
+    }
+    return decimalIntList;
   }
 
   /// Convert number to 32/64 bit unsigned integer as little-endian sequence of bytes
@@ -225,104 +274,7 @@ class SwitcherApiObject {
   String signPacketWithCrcKey(String hexPacket) {
     List<int> binaryPacket = hexDecimalStringToDecimalList(hexPacket);
 
-    Uint8List prefixed = Uint8List(5311);
-
-    // prefixed.buffer.asUint32List(0, 1)[0] = payload.length;
-    // prefixed.setRange(4, prefixed.length, payload);
-    ByteData bn = ByteData(4);
-    print(bn.getUint32(5311, Endian.little));
-    double a = 5311;
-    print('Now');
-    int c = 5311;
-    int b = 0000;
-    ByteData(b).setFloat32(2, a);
-    print(b);
-    // int a = ByteData.getUint32(2, 2);
-
-    // CrcValue a = Crc16CcittTrue().convert(binaryPacket);
-    List<int> binary_packet = [
-      254,
-      240,
-      82,
-      0,
-      2,
-      50,
-      161,
-      0,
-      0,
-      0,
-      0,
-      0,
-      52,
-      0,
-      1,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      52,
-      65,
-      47,
-      97,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      240,
-      254,
-      28,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ];
-    //Out --> 36087
-
-    String result = NoNullSaftyMethods.getCrc16CcittTrue(binary_packet);
+    int result = NoNullSafetyMethods.getCrc16CcittTrue(binaryPacket);
     // CrcValue result = Crc16CcittTrue().convert(binary_packet);
     print('');
     print('bin $result');
