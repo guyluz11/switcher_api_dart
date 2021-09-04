@@ -40,18 +40,19 @@ class SwitcherApiObject {
     }
 
     final SwitcherDevicesTypes sDeviceType = getDeviceType(messageBuffer);
-    final String deviceId = getDeviceId(hexSeparatedLetters);
+    final String deviceId = extractDeviceId(hexSeparatedLetters);
     final SwitcherDeviceState switcherDeviceState =
-        getDeviceState(hexSeparatedLetters);
-    // String switcherIp = getDeviceIp(hexSeparatedLetters);
+        extractSwitchState(hexSeparatedLetters);
+    // final String switcherIp = extractIpAddr(hexSeparatedLetters);
     final String switcherIp = datagram.address.address;
-    final String switcherMac = getMac(hexSeparatedLetters);
-    final String powerConsumption = getPowerConsumption(hexSeparatedLetters);
+    final String switcherMac = extractMac(hexSeparatedLetters);
+    final String powerConsumption =
+        extractPowerConsumption(hexSeparatedLetters);
     final String getRemaining =
-        getRemainingTimeForExecution(hexSeparatedLetters);
-    final String switcherName = getDeviceName(data);
+        extractRemainingTimeForExecution(hexSeparatedLetters);
+    final String switcherName = extractDeviceName(data);
     final String lastShutdownRemainingSecondsValue =
-        shutdownRemainingSeconds(hexSeparatedLetters);
+        extractShutdownRemainingSeconds(hexSeparatedLetters);
 
     return SwitcherApiObject(
         deviceType: sDeviceType,
@@ -80,23 +81,23 @@ class SwitcherApiObject {
   String? statusSocket;
   String? lastShutdownRemainingSecondsValue;
 
-  Socket? _socket = null;
+  Socket? _socket;
 
-  var pSession = null;
+  String? pSession;
 
-  static const P_SESSION = '00000000';
-  static const P_KEY = '00000000000000000000000000000000';
+  static const pSessionValue = '00000000';
+  static const pKey = '00000000000000000000000000000000';
 
-  static const STATUS_EVENT = 'status';
-  static const READY_EVENT = 'ready';
-  static const ERROR_EVENT = 'error';
-  static const STATE_CHANGED_EVENT = 'state';
+  static const statusEvent = 'status';
+  static const readyEvent = 'ready';
+  static const errorEvent = 'error';
+  static const stateChangedEvent = 'state';
 
-  static const SWITCHER_UDP_IP = '0.0.0.0';
-  static const SWITCHER_UDP_PORT = 20002;
+  static const switcherUdpIp = '0.0.0.0';
+  static const switcherUdpPort = 20002;
 
-  static const String OFF = '0';
-  static const String ON = '1';
+  static const offValue = '0';
+  static const onValue = '1';
 
   static bool isSwitcherMessage(
       Uint8List data, List<String> hexSeparatedLetters) {
@@ -130,35 +131,31 @@ class SwitcherApiObject {
   }
 
   Future<void> turnOn({int duration = 0}) async {
-    String offCommand = ON + '00' + _timerValue(duration);
+    final String offCommand = '${onValue}00${_timerValue(duration)}';
 
     await _runPowerCommand(offCommand);
   }
 
   Future<void> turnOff() async {
-    String offCommand = OFF + '00' + '00000000';
+    const String offCommand = '${offValue}0000000000';
     await _runPowerCommand(offCommand);
   }
 
   Future<void> _runPowerCommand(String commandType) async {
     pSession = await _login();
+    if (pSession == 'B') {
+      print('Switcher error');
+      return;
+    }
+    var data =
+        'fef05d0002320102${pSession!}340001000000000000000000${_getTimeStamp()}'
+        '00000000000000000000f0fe${deviceId}00${phoneId}0000$devicePass'
+        '000000000000000000000000000000000000000000000000000000000106000'
+        '$commandType';
 
-    var data = "fef05d0002320102" +
-        pSession +
-        "340001000000000000000000" +
-        _getTimeStamp() +
-        "00000000000000000000f0fe" +
-        deviceId +
-        "00" +
-        phoneId +
-        "0000" +
-        devicePass +
-        "000000000000000000000000000000000000000000000000000000000106000" +
-        commandType;
+    data = await _crcSignFullPacketComKey(data, pKey);
 
-    data = await _crcSignFullPacketComKey(data, P_KEY);
-
-    Socket socket = await getSocket();
+    final Socket socket = await getSocket();
     socket.add(hexStringToDecimalList(data));
     // Uint8List dataFromDevice = await socket.first;
     // print(dataFromDevice);
@@ -169,23 +166,24 @@ class SwitcherApiObject {
     _getFullState();
   }
 
-  /// Used for sending the get state packaet to the device.
-  /// Returns a tuple of hex timestamp, session id and an instance of SwitcherStateResponse
+  /// Used for sending the get state packet to the device.
+  /// Returns a tuple of hex timestamp,
+  /// session id and an instance of SwitcherStateResponse
   Future<String> _getFullState() async {
     return _login();
   }
 
   /// Used for sending the login packet to the device.
   Future<String> _login() async {
-    if (pSession != null) return pSession;
+    if (pSession != null) return pSession!;
 
     try {
-      String data = 'fef052000232a100${P_SESSION}340001000000000000000000'
-          '${_getTimeStamp()}00000000000000000000f0fe1c00${this.phoneId}0000'
-          '${this.devicePass}'
+      String data = 'fef052000232a100${pSessionValue}340001000000000000000000'
+          '${_getTimeStamp()}00000000000000000000f0fe1c00${phoneId}0000'
+          '$devicePass'
           '00000000000000000000000000000000000000000000000000000000';
 
-      data = await _crcSignFullPacketComKey(data, P_KEY);
+      data = await _crcSignFullPacketComKey(data, pKey);
       _socket = await getSocket();
       if (_socket == null) {
         throw 'Error';
@@ -193,29 +191,29 @@ class SwitcherApiObject {
 
       _socket!.add(hexStringToDecimalList(data));
 
-      Uint8List firstData = await _socket!.first;
-      var result_session =
+      final Uint8List firstData = await _socket!.first;
+      final String resultSession =
           substrLikeInJavaScript(intListToHex(firstData).join(), 16, 8);
-      print('First element of the stream is $result_session');
 
-      return result_session;
+      return resultSession;
     } catch (error) {
       log = 'login failed due to an error $error';
       print(log);
       pSession = 'B';
     }
-    return pSession;
+    return pSession!;
   }
 
   static Future<String> _crcSignFullPacketComKey(
       String pData, String pKey) async {
-    List<int> bufferHex = hexStringToDecimalList(pData);
+    String pDataTemp = pData;
+    final List<int> bufferHex = hexStringToDecimalList(pDataTemp);
 
     String crc = intListToHex(packBigEndian(
             int.parse(Crc16XmodemWith0x1021().convert(bufferHex).toString())))
         .join();
 
-    pData = pData +
+    pDataTemp = pDataTemp +
         substrLikeInJavaScript(crc, 6, 2) +
         substrLikeInJavaScript(crc, 4, 2);
 
@@ -228,28 +226,22 @@ class SwitcherApiObject {
             .toString())))
         .join();
 
-    pData = pData +
+    return pDataTemp +
         substrLikeInJavaScript(crc, 6, 2) +
         substrLikeInJavaScript(crc, 4, 2);
-
-    print(substrLikeInJavaScript('000094a6', 4, 2));
-
-    return pData;
   }
 
   static String _getTimeStamp() {
-    int timeInSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final int timeInSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
-    List<int> timeInBytes = packLittleEndian(timeInSeconds);
+    final List<int> timeInBytes = packLittleEndian(timeInSeconds);
 
-    String inHex = intListToHex(timeInBytes).join();
-
-    return inHex;
+    return intListToHex(timeInBytes).join();
   }
 
   /// Same as Buffer.from(value, 'hex') in JavaScript
   static List<int> hexStringToDecimalList(String hex) {
-    List<int> decimalIntList = [];
+    final List<int> decimalIntList = [];
     String twoNumbers = '';
 
     for (int i = 0; i < hex.length; i++) {
@@ -265,29 +257,10 @@ class SwitcherApiObject {
     return decimalIntList;
   }
 
-  // static List<String> decimalStringToDecimalStringList(String decimal) {
-  //   List<String> decimalIntList = [];
-  //   String twoNumbers = '';
-  //
-  //   for (int i = 0; i < decimal.length; i++) {
-  //     if (twoNumbers == '') {
-  //       twoNumbers = twoNumbers + decimal[i];
-  //
-  //       continue;
-  //     } else {
-  //       twoNumbers = twoNumbers + decimal[i];
-  //
-  //       decimalIntList.add(twoNumbers);
-  //       twoNumbers = '';
-  //     }
-  //   }
-  //   return decimalIntList;
-  // }
-
   /// Convert number to unsigned integer as little-endian sequence of bytes
   /// Same as struct.pack('<I', value) in JavaScript
   static List<int> packLittleEndian(int valueToConvert) {
-    ByteData sendValueBytes = ByteData(8);
+    final ByteData sendValueBytes = ByteData(8);
 
     try {
       sendValueBytes.setUint64(0, valueToConvert, Endian.little);
@@ -295,27 +268,23 @@ class SwitcherApiObject {
       sendValueBytes.setUint32(0, valueToConvert, Endian.little);
     }
 
-    Uint8List timeInBytes = sendValueBytes.buffer.asUint8List();
-    timeInBytes = timeInBytes.sublist(0, timeInBytes.length - 4);
-
-    return timeInBytes;
+    final Uint8List timeInBytes = sendValueBytes.buffer.asUint8List();
+    return timeInBytes.sublist(0, timeInBytes.length - 4);
   }
 
   /// Convert number to unsigned integer as big-endian sequence of bytes
   /// Same as struct.pack('>I', value) in JavaScript
   static List<int> packBigEndian(int valueToConvert) {
-    ByteData sendValueBytes = ByteData(8);
+    final ByteData sendValueBytes = ByteData(8);
 
     try {
-      sendValueBytes.setUint64(0, valueToConvert, Endian.big);
+      sendValueBytes.setUint64(0, valueToConvert);
     } on UnsupportedError {
-      sendValueBytes.setUint32(0, valueToConvert, Endian.big);
+      sendValueBytes.setUint32(0, valueToConvert);
     }
 
-    Uint8List timeInBytes = sendValueBytes.buffer.asUint8List();
-    timeInBytes = timeInBytes.sublist(4);
-
-    return timeInBytes;
+    final Uint8List timeInBytes = sendValueBytes.buffer.asUint8List();
+    return timeInBytes.sublist(4);
   }
 
   /// Convert list of bytes/integers into their hex 16 value with padding 2 of 0
@@ -330,84 +299,52 @@ class SwitcherApiObject {
   }
 
   /// Generate hexadecimal representation of the current timestamp.
-  /// Return: Hexadecimal representation of the current unix time retrieved by ``time.time``.
+  /// Return: Hexadecimal representation of the current
+  /// unix time retrieved by ``time.time``.
   String currentTimestampToHexadecimal() {
-    String currentTimeSinceEpoch =
+    final String currentTimeSinceEpoch =
         DateTime.now().millisecondsSinceEpoch.toString();
-    String currentTimeRounded =
+    final String currentTimeRounded =
         currentTimeSinceEpoch.substring(0, currentTimeSinceEpoch.length - 3);
-    print(currentTimeRounded);
 
-    int currentTimeInt = int.parse(currentTimeRounded);
-
-    // TODO: Undestand what is pack("<I", currentTimeInt) in python and continue
-    // Packed binary_timestamp = Packed(currentTimeInt);
-    // print(binary_timestamp);
+    final int currentTimeInt = int.parse(currentTimeRounded);
 
     return currentTimeInt.toRadixString(16).padLeft(2, '0');
   }
 
-  /// Sign the packets with the designated crc key.
-  /// Return: The calculated and signed packet.
-  String signPacketWithCrcKey(String hexPacket) {
-    List<int> binaryPacket = hexDecimalStringToDecimalList(hexPacket);
+  /// Extract the IP address from the broadcast message.
+  static String extractIpAddr(List<String> hexSeparatedLetters) {
+    final String ipAddrSection =
+        substrLikeInJavaScript(hexSeparatedLetters.join(), 152, 8);
 
-    int result =
-        int.parse(Crc16XmodemWith0x1021().convert(binaryPacket).toString());
-
-    print(intListToHex(packLittleEndian(result)));
-
-    print('');
-    print('bin $result');
-    return 'a';
+    final int ipAddrInt = int.parse(
+        substrLikeInJavaScript(ipAddrSection, 0, 2) +
+            substrLikeInJavaScript(ipAddrSection, 2, 2) +
+            substrLikeInJavaScript(ipAddrSection, 4, 2) +
+            substrLikeInJavaScript(ipAddrSection, 6, 2),
+        radix: 16);
+    return ipAddrInt.toString();
   }
 
-  /// Convert Hexadecimal String (example FE) to Decimal list (will be 254).
-  /// Called in python unhexlify.
-  List<int> hexDecimalStringToDecimalList(String hexDecimalString) {
-    List<int> binaryPacket = [];
-
-    for (int i = 0; i <= hexDecimalString.length - 2; i += 2) {
-      final hex = hexDecimalString.substring(i, i + 2);
-
-      final number = int.parse(hex, radix: 16);
-      binaryPacket.add(number);
-    }
-    return binaryPacket;
-  }
-
-  static String getDeviceIp(List<String> hexSeparatedLetters) {
-    // Extract the IP address from the broadcast message.
-    // TODO: Fix function to return ip and not hexIp
-    final List<String> hexIp = hexSeparatedLetters.sublist(152, 160);
-    // int ipAddressInt = int.parse(hexIp.sublist(6, 8).join() + hexIp.sublist(4, 6).join() + hexIp.sublist(2, 4).join() + hexIp.sublist(0, 2).join());
-    // int ipAddressStringInt = int.parse(hexIp.sublist(6, 8).join()) + int.parse(hexIp.sublist(4, 6).join()) + int.parse(hexIp.sublist(2, 4).join()) + int.parse(hexIp.sublist(0, 2).join());
-    // int(hex_ip[6:8] + hex_ip[4:6] + hex_ip[2:4] + hex_ip[0:2], 16)
-    return hexIp.toString();
-  }
-
-  static String getPowerConsumption(List<String> hexSeparatedLetters) {
-    final List<String> hex_power_consumption =
+  static String extractPowerConsumption(List<String> hexSeparatedLetters) {
+    final List<String> hexPowerConsumption =
         hexSeparatedLetters.sublist(270, 278);
-
-    // return int.parse(hex_power_consumption.sublist(2, 4).join()) + int(hex_power_consumption.sublist(0, 2).join());
-    return hex_power_consumption.join();
+    return hexPowerConsumption.join();
   }
 
   /// Extract the time remains for the current execution.
-  static String getRemainingTimeForExecution(List<String> hexSeparatedLetters) {
-    final List<String> hex_power_consumption =
+  static String extractRemainingTimeForExecution(
+      List<String> hexSeparatedLetters) {
+    final List<String> hexPowerConsumption =
         hexSeparatedLetters.sublist(294, 302);
     try {
-      final int sum = int.parse(hex_power_consumption.sublist(6, 8).join()) +
-          int.parse(hex_power_consumption.sublist(4, 6).join()) +
-          int.parse(hex_power_consumption.sublist(2, 4).join()) +
-          int.parse(hex_power_consumption.sublist(0, 2).join());
-
-      // TODO: complete the calculation of the remaining time
+      final int sum = int.parse(hexPowerConsumption.sublist(6, 8).join()) +
+          int.parse(hexPowerConsumption.sublist(4, 6).join()) +
+          int.parse(hexPowerConsumption.sublist(2, 4).join()) +
+          int.parse(hexPowerConsumption.sublist(0, 2).join());
       return sum.toString();
     } catch (e) {
-      return hex_power_consumption.join();
+      return hexPowerConsumption.join();
     }
   }
 
@@ -426,7 +363,7 @@ class SwitcherApiObject {
     return tempText;
   }
 
-  static String getMac(List<String> hexSeparatedLetters) {
+  static String extractMac(List<String> hexSeparatedLetters) {
     final String macNoColon =
         hexSeparatedLetters.sublist(160, 172).join().toUpperCase();
     final String macAddress = '${macNoColon.substring(0, 2)}:'
@@ -437,63 +374,40 @@ class SwitcherApiObject {
     return macAddress;
   }
 
-  static String getDeviceName(List<int> data) {
+  static String extractDeviceName(List<int> data) {
     return utf8.decode(data.sublist(42, 74));
   }
 
   /// Same as Buffer.from(value) in javascript
   /// Not to be confused with Buffer.from(value, 'hex')
   static String getUtf8Encoded(String list) {
-    List<int> encoded = utf8.encode(list);
+    final List<int> encoded = utf8.encode(list);
 
     return intListToHex(encoded).join();
   }
 
-  static String shutdownRemainingSeconds(List<String> hexSeparatedLetters) {
-    final String hexAutoShutdownVal =
-        hexSeparatedLetters.sublist(310, 318).join();
-    // TODO: Complete the code from python
-    // int int_auto_shutdown_val_secs = int.parse(
-    //   hexAutoShutdownVal.substring(6, 8)
-    // + hexAutoShutdownVal.substring(4, 6)
-    // + hexAutoShutdownVal.substring(2, 4)
-    // + hexAutoShutdownVal.substring(0, 2),
-    // 16,
-    // );
-    // seconds_to_iso_time(int_auto_shutdown_val_secs)
-    // """Convert seconds to iso time.
-    //
-    // Args:
-    //     all_seconds: the total number of seconds to convert.
-    //
-    // Return:
-    //     A string representing the converted iso time in %H:%M:%S format.
-    //     e.g. "02:24:37".
-    //
-    // """
-    // minutes, seconds = divmod(int(all_seconds), 60)
-    // hours, minutes = divmod(minutes, 60)
-    //
-    // return datetime.time(hour=hours, minute=minutes, second=seconds).isoformat()
-    return hexAutoShutdownVal;
+  static String extractShutdownRemainingSeconds(
+      List<String> hexSeparatedLetters) {
+    // final String hexAutoShutdownVal =
+    //     hexSeparatedLetters.sublist(310, 318).join();
+    final String timeLeftSeconds =
+        substrLikeInJavaScript(hexSeparatedLetters.join(), 294, 8);
+
+    return int.parse(
+            substrLikeInJavaScript(timeLeftSeconds, 6, 8) +
+                substrLikeInJavaScript(timeLeftSeconds, 4, 6) +
+                substrLikeInJavaScript(timeLeftSeconds, 2, 4) +
+                substrLikeInJavaScript(timeLeftSeconds, 0, 2),
+            radix: 16)
+        .toString();
   }
 
-  // /// Not sure what is this but it is exist in other switcher programs
-  // static String inetNtoa(List<String> hexSeparatedLetters) {
-  //   // extract to utils https://stackoverflow.com/a/21613691
-  //
-  //   // JavascriptCode
-  //   // var a = ((num >> 24) & 0xFF) >>> 0;
-  //   // var b = ((num >> 16) & 0xFF) >>> 0;
-  //   // var c = ((num >> 8) & 0xFF) >>> 0;
-  //   // var d = (num & 0xFF) >>> 0;
-  // }
-
-  static String getDeviceId(List<String> hexSeparatedLetters) {
+  static String extractDeviceId(List<String> hexSeparatedLetters) {
     return hexSeparatedLetters.sublist(36, 42).join();
   }
 
-  static SwitcherDeviceState getDeviceState(List<String> hexSeparatedLetters) {
+  static SwitcherDeviceState extractSwitchState(
+      List<String> hexSeparatedLetters) {
     SwitcherDeviceState switcherDeviceState = SwitcherDeviceState.cantGetState;
 
     String hexModel = '';
@@ -518,43 +432,26 @@ class SwitcherApiObject {
     }
 
     try {
-      Socket socket = await _connect(switcherIp, port);
-      print('connected');
-
-      // Uint8List firstData = await socket.first;
-      // print('firstData is $firstData');
-      // listen to the received data event stream
-
-      // socket.listen((List<int> event) {
-      //   print('Got massage on socket');
-      //   print(utf8.decode(event));
-      // })
-      //   ..onDone(() {
-      //     print('On Done');
-      //   })
-      //   ..onError((e) {
-      //     print('On Error $e');
-      //   });
-
-      // await Future.delayed(Duration(seconds: 20));
+      final Socket socket = await _connect(switcherIp, port);
       return socket;
     } catch (e) {
       _socket = null;
       print('Error connecting to socket $e');
-      throw e;
+      rethrow;
     }
   }
 
   Future<Socket> _connect(String ip, int port) async {
-    print('ip:$ip port: $port');
     Socket a = await Socket.connect(ip, port);
     return a;
   }
 
   String _timerValue(int minutes) {
-    if (minutes == 0)
-      return "00000000"; // when duration set to zero, Switcher sends regular on command
-    var seconds = minutes * 60;
+    if (minutes == 0) {
+      // when duration set to zero, Switcher sends regular on command
+      return '00000000';
+    }
+    final seconds = minutes * 60;
     return intListToHex(packLittleEndian(seconds)).join();
   }
 }
