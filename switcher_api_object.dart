@@ -129,6 +129,12 @@ class SwitcherApiObject {
     return sDevicesTypes;
   }
 
+  Future<void> turnOn({int duration = 0}) async {
+    String offCommand = ON + '00' + _timerValue(duration);
+
+    await _runPowerCommand(offCommand);
+  }
+
   Future<void> turnOff() async {
     String offCommand = OFF + '00' + '00000000';
     await _runPowerCommand(offCommand);
@@ -153,10 +159,9 @@ class SwitcherApiObject {
     data = await _crcSignFullPacketComKey(data, P_KEY);
 
     Socket socket = await getSocket();
-    socket.write(hexStringToDecimalList(data));
-    socket.listen((event) {
-      print('');
-    });
+    socket.add(hexStringToDecimalList(data));
+    // Uint8List dataFromDevice = await socket.first;
+    // print(dataFromDevice);
   }
 
   /// Used for sending actions to the device
@@ -186,22 +191,17 @@ class SwitcherApiObject {
         throw 'Error';
       }
 
-      _socket!.write(hexStringToDecimalList(data));
-      pSession = 'G';
+      _socket!.add(hexStringToDecimalList(data));
 
-      _socket!.listen((event) {
-        print('First alement of the stream is $event');
-      });
+      Uint8List firstData = await _socket!.first;
+      var result_session =
+          substrLikeInJavaScript(intListToHex(firstData).join(), 16, 8);
+      print('First element of the stream is $result_session');
 
-      await Future.delayed(Duration(seconds: 1));
-
-      // Uint8List requestResponse = await _socket!.first;
-      return 'ok';
-      //
-      // return substrLikeInJavaScript(
-      //     intListToHex(requestResponse).join(), 16, 8);
+      return result_session;
     } catch (error) {
       log = 'login failed due to an error $error';
+      print(log);
       pSession = 'B';
     }
     return pSession;
@@ -255,7 +255,6 @@ class SwitcherApiObject {
     for (int i = 0; i < hex.length; i++) {
       if (twoNumbers == '') {
         twoNumbers = twoNumbers + hex[i];
-
         continue;
       } else {
         twoNumbers = twoNumbers + hex[i];
@@ -522,12 +521,10 @@ class SwitcherApiObject {
       Socket socket = await _connect(switcherIp, port);
       print('connected');
 
-      socket.listen((event) {
-        print('First alement of the stream is $event');
-      });
       // Uint8List firstData = await socket.first;
       // print('firstData is $firstData');
       // listen to the received data event stream
+
       // socket.listen((List<int> event) {
       //   print('Got massage on socket');
       //   print(utf8.decode(event));
@@ -537,9 +534,9 @@ class SwitcherApiObject {
       //   })
       //   ..onError((e) {
       //     print('On Error $e');
-      //   });firstData
+      //   });
 
-      await Future.delayed(Duration(seconds: 20));
+      // await Future.delayed(Duration(seconds: 20));
       return socket;
     } catch (e) {
       _socket = null;
@@ -550,8 +547,15 @@ class SwitcherApiObject {
 
   Future<Socket> _connect(String ip, int port) async {
     print('ip:$ip port: $port');
-    return Socket.connect(ip, port);
-    ;
+    Socket a = await Socket.connect(ip, port);
+    return a;
+  }
+
+  String _timerValue(int minutes) {
+    if (minutes == 0)
+      return "00000000"; // when duration set to zero, Switcher sends regular on command
+    var seconds = minutes * 60;
+    return intListToHex(packLittleEndian(seconds)).join();
   }
 }
 
