@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'aioswitcher/api/switcher_packets.dart';
-import 'aioswitcher/no_null_safty_file.dart';
+import 'package:crclib/crclib.dart';
 
 class SwitcherApiObject {
   SwitcherApiObject({
@@ -26,11 +25,7 @@ class SwitcherApiObject {
   factory SwitcherApiObject.createWithBytes(Datagram datagram) {
     final Uint8List data = datagram.data;
 
-    final List<String> messageBuffer = [];
-
-    for (final int unit8 in data) {
-      messageBuffer.add(unit8.toRadixString(16).padLeft(2, '0'));
-    }
+    final List<String> messageBuffer = intListToHex(data);
 
     final List<String> hexSeparatedLetters = [];
 
@@ -85,6 +80,8 @@ class SwitcherApiObject {
   String? statusSocket;
   String? lastShutdownRemainingSecondsValue;
 
+  Socket? _socket = null;
+
   var pSession = null;
 
   static const P_SESSION = '00000000';
@@ -132,13 +129,34 @@ class SwitcherApiObject {
     return sDevicesTypes;
   }
 
-  void turnOff() {
+  Future<void> turnOff() async {
     String offCommand = OFF + '00' + '00000000';
-    _runPowerCommand(offCommand);
+    await _runPowerCommand(offCommand);
   }
 
   Future<void> _runPowerCommand(String commandType) async {
     pSession = await _login();
+
+    var data = "fef05d0002320102" +
+        pSession +
+        "340001000000000000000000" +
+        _getTimeStamp() +
+        "00000000000000000000f0fe" +
+        deviceId +
+        "00" +
+        phoneId +
+        "0000" +
+        devicePass +
+        "000000000000000000000000000000000000000000000000000000000106000" +
+        commandType;
+
+    data = await _crcSignFullPacketComKey(data, P_KEY);
+
+    Socket socket = await getSocket();
+    socket.write(hexStringToDecimalList(data));
+    socket.listen((event) {
+      print('');
+    });
   }
 
   /// Used for sending actions to the device
@@ -163,13 +181,28 @@ class SwitcherApiObject {
           '00000000000000000000000000000000000000000000000000000000';
 
       data = await _crcSignFullPacketComKey(data, P_KEY);
-      String timestamp = currentTimestampToHexadecimal();
-      String packet =
-          SwitcherPackets.LOGIN_PACKET.replaceFirst('{}', timestamp);
-      print(packet);
-      signPacketWithCrcKey(packet);
+      _socket = await getSocket();
+      if (_socket == null) {
+        throw 'Error';
+      }
+
+      _socket!.write(hexStringToDecimalList(data));
+      pSession = 'G';
+
+      _socket!.listen((event) {
+        print('First alement of the stream is $event');
+      });
+
+      await Future.delayed(Duration(seconds: 1));
+
+      // Uint8List requestResponse = await _socket!.first;
+      return 'ok';
+      //
+      // return substrLikeInJavaScript(
+      //     intListToHex(requestResponse).join(), 16, 8);
     } catch (error) {
       log = 'login failed due to an error $error';
+      pSession = 'B';
     }
     return pSession;
   }
@@ -177,26 +210,44 @@ class SwitcherApiObject {
   static Future<String> _crcSignFullPacketComKey(
       String pData, String pKey) async {
     List<int> bufferHex = hexStringToDecimalList(pData);
-    String a = NoNullSafetyMethods.getCrc16CcittTrue(bufferHex)
-        .toRadixString(16)
-        .padLeft(2, '0');
-    print(a);
-    decimalStringToDecimalStringList(pKey);
-    return 'Test';
+
+    String crc = intListToHex(packBigEndian(
+            int.parse(Crc16XmodemWith0x1021().convert(bufferHex).toString())))
+        .join();
+
+    pData = pData +
+        substrLikeInJavaScript(crc, 6, 2) +
+        substrLikeInJavaScript(crc, 4, 2);
+
+    crc = substrLikeInJavaScript(crc, 6, 2) +
+        substrLikeInJavaScript(crc, 4, 2) +
+        getUtf8Encoded(pKey);
+
+    crc = intListToHex(packBigEndian(int.parse(Crc16XmodemWith0x1021()
+            .convert(hexStringToDecimalList(crc))
+            .toString())))
+        .join();
+
+    pData = pData +
+        substrLikeInJavaScript(crc, 6, 2) +
+        substrLikeInJavaScript(crc, 4, 2);
+
+    print(substrLikeInJavaScript('000094a6', 4, 2));
+
+    return pData;
   }
 
   static String _getTimeStamp() {
     int timeInSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
-    List<int> timeInBytes = pack(timeInSeconds);
-    String inHex = '';
-    timeInBytes.forEach((element) {
-      inHex += element.toRadixString(16).padLeft(2, '0');
-    });
+    List<int> timeInBytes = packLittleEndian(timeInSeconds);
+
+    String inHex = intListToHex(timeInBytes).join();
 
     return inHex;
   }
 
+  /// Same as Buffer.from(value, 'hex') in JavaScript
   static List<int> hexStringToDecimalList(String hex) {
     List<int> decimalIntList = [];
     String twoNumbers = '';
@@ -215,40 +266,68 @@ class SwitcherApiObject {
     return decimalIntList;
   }
 
-  static List<String> decimalStringToDecimalStringList(String decimal) {
-    List<String> decimalIntList = [];
-    String twoNumbers = '';
+  // static List<String> decimalStringToDecimalStringList(String decimal) {
+  //   List<String> decimalIntList = [];
+  //   String twoNumbers = '';
+  //
+  //   for (int i = 0; i < decimal.length; i++) {
+  //     if (twoNumbers == '') {
+  //       twoNumbers = twoNumbers + decimal[i];
+  //
+  //       continue;
+  //     } else {
+  //       twoNumbers = twoNumbers + decimal[i];
+  //
+  //       decimalIntList.add(twoNumbers);
+  //       twoNumbers = '';
+  //     }
+  //   }
+  //   return decimalIntList;
+  // }
 
-    for (int i = 0; i < decimal.length; i++) {
-      if (twoNumbers == '') {
-        twoNumbers = twoNumbers + decimal[i];
-
-        continue;
-      } else {
-        twoNumbers = twoNumbers + decimal[i];
-
-        decimalIntList.add(twoNumbers);
-        twoNumbers = '';
-      }
-    }
-    return decimalIntList;
-  }
-
-  /// Convert number to 32/64 bit unsigned integer as little-endian sequence of bytes
-  static List<int> pack(int valueToConvert) {
-    // var timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  /// Convert number to unsigned integer as little-endian sequence of bytes
+  /// Same as struct.pack('<I', value) in JavaScript
+  static List<int> packLittleEndian(int valueToConvert) {
     ByteData sendValueBytes = ByteData(8);
 
     try {
-      sendValueBytes.setUint64(0, valueToConvert);
+      sendValueBytes.setUint64(0, valueToConvert, Endian.little);
     } on UnsupportedError {
-      sendValueBytes.setUint32(0, valueToConvert);
+      sendValueBytes.setUint32(0, valueToConvert, Endian.little);
+    }
+
+    Uint8List timeInBytes = sendValueBytes.buffer.asUint8List();
+    timeInBytes = timeInBytes.sublist(0, timeInBytes.length - 4);
+
+    return timeInBytes;
+  }
+
+  /// Convert number to unsigned integer as big-endian sequence of bytes
+  /// Same as struct.pack('>I', value) in JavaScript
+  static List<int> packBigEndian(int valueToConvert) {
+    ByteData sendValueBytes = ByteData(8);
+
+    try {
+      sendValueBytes.setUint64(0, valueToConvert, Endian.big);
+    } on UnsupportedError {
+      sendValueBytes.setUint32(0, valueToConvert, Endian.big);
     }
 
     Uint8List timeInBytes = sendValueBytes.buffer.asUint8List();
     timeInBytes = timeInBytes.sublist(4);
 
     return timeInBytes;
+  }
+
+  /// Convert list of bytes/integers into their hex 16 value with padding 2 of 0
+  /// Same as .toString('hex'); in JavaScript
+  static List<String> intListToHex(List<int> bytes) {
+    final List<String> messageBuffer = [];
+
+    for (final int unit8 in bytes) {
+      messageBuffer.add(unit8.toRadixString(16).padLeft(2, '0'));
+    }
+    return messageBuffer;
   }
 
   /// Generate hexadecimal representation of the current timestamp.
@@ -274,8 +353,11 @@ class SwitcherApiObject {
   String signPacketWithCrcKey(String hexPacket) {
     List<int> binaryPacket = hexDecimalStringToDecimalList(hexPacket);
 
-    int result = NoNullSafetyMethods.getCrc16CcittTrue(binaryPacket);
-    // CrcValue result = Crc16CcittTrue().convert(binary_packet);
+    int result =
+        int.parse(Crc16XmodemWith0x1021().convert(binaryPacket).toString());
+
+    print(intListToHex(packLittleEndian(result)));
+
     print('');
     print('bin $result');
     return 'a';
@@ -330,6 +412,21 @@ class SwitcherApiObject {
     }
   }
 
+  /// Substring like in JavaScript
+  /// If first index is bigger than second index than it will cut until the
+  /// first and will get the second index number of characters from there
+  static String substrLikeInJavaScript(
+      String text, int firstIndex, int secondIndex) {
+    String tempText = text;
+    if (firstIndex > secondIndex) {
+      tempText = tempText.substring(firstIndex);
+      tempText = tempText.substring(0, secondIndex);
+    } else {
+      tempText = tempText.substring(firstIndex, secondIndex);
+    }
+    return tempText;
+  }
+
   static String getMac(List<String> hexSeparatedLetters) {
     final String macNoColon =
         hexSeparatedLetters.sublist(160, 172).join().toUpperCase();
@@ -343,6 +440,14 @@ class SwitcherApiObject {
 
   static String getDeviceName(List<int> data) {
     return utf8.decode(data.sublist(42, 74));
+  }
+
+  /// Same as Buffer.from(value) in javascript
+  /// Not to be confused with Buffer.from(value, 'hex')
+  static String getUtf8Encoded(String list) {
+    List<int> encoded = utf8.encode(list);
+
+    return intListToHex(encoded).join();
   }
 
   static String shutdownRemainingSeconds(List<String> hexSeparatedLetters) {
@@ -407,6 +512,53 @@ class SwitcherApiObject {
     }
     return switcherDeviceState;
   }
+
+  Future<Socket> getSocket() async {
+    if (_socket != null) {
+      return _socket!;
+    }
+
+    try {
+      Socket socket = await _connect(switcherIp, port);
+      print('connected');
+
+      socket.listen((event) {
+        print('First alement of the stream is $event');
+      });
+      // Uint8List firstData = await socket.first;
+      // print('firstData is $firstData');
+      // listen to the received data event stream
+      // socket.listen((List<int> event) {
+      //   print('Got massage on socket');
+      //   print(utf8.decode(event));
+      // })
+      //   ..onDone(() {
+      //     print('On Done');
+      //   })
+      //   ..onError((e) {
+      //     print('On Error $e');
+      //   });firstData
+
+      await Future.delayed(Duration(seconds: 20));
+      return socket;
+    } catch (e) {
+      _socket = null;
+      print('Error connecting to socket $e');
+      throw e;
+    }
+  }
+
+  Future<Socket> _connect(String ip, int port) async {
+    print('ip:$ip port: $port');
+    return Socket.connect(ip, port);
+    ;
+  }
+}
+
+class Crc16XmodemWith0x1021 extends ParametricCrc {
+  Crc16XmodemWith0x1021()
+      : super(16, 0x1021, 0x1021, 0x0000,
+            inputReflected: false, outputReflected: false);
 }
 
 enum SwitcherDeviceState {

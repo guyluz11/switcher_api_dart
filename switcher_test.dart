@@ -38,6 +38,6 @@ Stream<int?> getDevices() async* {
         'Datagram from ${switcherEntity.switcherIp}:${switcherEntity.port}, type: ${switcherEntity.deviceType}, '
         // 'id: $deviceId, ');
         'id: ${switcherEntity.deviceId}, state: ${switcherEntity.deviceState}');
-    switcherEntity.turnOff();
+    await switcherEntity.turnOff();
   }
 }
